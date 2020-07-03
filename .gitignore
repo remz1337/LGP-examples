@@ -1,3 +1,5 @@
+## Project specific output files
+*.csv
 
 # Created by https://www.gitignore.io/api/java,macos,gradle,intellij
 
