@@ -34,10 +34,10 @@ import nz.co.jedsimson.lgp.core.evolution.fitness.FitnessCase
 import nz.co.jedsimson.lgp.core.evolution.fitness.FitnessContext
 import nz.co.jedsimson.lgp.core.program.Output
 import nz.co.jedsimson.lgp.core.program.Program
-import java.nio.file.Files
-import java.nio.file.Paths
-import java.io.FileWriter
-import java.io.IOException
+import java.io.*
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 
 /*
  * An example of setting up an environment to use LGP to find programs for the function `x^2 + 2x + 2`.
@@ -55,10 +55,10 @@ data class SR_Bin3Solution(
 ) : Solution<Double>
 
 // Define the problem and the necessary components to solve it.
-class SR_Bin3Problem : Problem<Double, Outputs.Single<Double>, Targets.Single<Double>>() {
-    override val name = "Simple Quadratic."
+class SR_Bin3Problem(val datasetStream: InputStream) : Problem<Double, Outputs.Single<Double>, Targets.Single<Double>>() {
+    override val name = "Symbolic Regression: Binomial 3"
 
-    override val description = Description("f(x) = x^2 + 2x + 2\n\trange = [-10:10:0.5]")
+    override val description = Description("f(x) = x^2 + 2x + 1\n\trange = [-10:10:0.5]")
 
     override val configLoader = object : ConfigurationLoader {
         override val information = ModuleInformation("Overrides default configuration for this problem.")
@@ -66,10 +66,10 @@ class SR_Bin3Problem : Problem<Double, Outputs.Single<Double>, Targets.Single<Do
         override fun load(): Configuration {
             val config = Configuration()
 
-            config.initialMinimumProgramLength = 10
-            config.initialMaximumProgramLength = 30
-            config.minimumProgramLength = 10
-            config.maximumProgramLength = 200
+            config.initialMinimumProgramLength = 20
+            config.initialMaximumProgramLength = 20
+            config.minimumProgramLength = 20
+            config.maximumProgramLength = 20
             config.operations = listOf(
                     "nz.co.jedsimson.lgp.lib.operations.Addition",
                     "nz.co.jedsimson.lgp.lib.operations.Subtraction",
@@ -78,11 +78,11 @@ class SR_Bin3Problem : Problem<Double, Outputs.Single<Double>, Targets.Single<Do
             config.constantsRate = 0.5
             config.constants = listOf("0.0", "1.0", "2.0")
             config.numCalculationRegisters = 4
-            config.populationSize = 500
-            config.generations = 1000
+            config.populationSize = 1000
+            config.generations = 1
             config.numFeatures = 1
             config.microMutationRate = 0.4
-            config.macroMutationRate = 0.6
+            config.macroMutationRate = 0.0 // disabled since individuals are fixed length
 
             return config
         }
@@ -95,9 +95,9 @@ class SR_Bin3Problem : Problem<Double, Outputs.Single<Double>, Targets.Single<Do
             parseFunction = String::toDouble
     )
 
-    val datasetLoader = object : DatasetLoader<Double, Targets.Single<Double>> {
-        // x^2 + 2x + 2
-        val func = { x: Double -> (x * x) + (2 * x) + 2 }
+    /*val datasetLoader = object : DatasetLoader<Double, Targets.Single<Double>> {
+        // x^2 + 2x + 1
+        val func = { x: Double -> (x * x) + (2 * x) + 1 }
         val gen = SequenceGenerator()
 
         override val information = ModuleInformation("Generates samples in the range [-10:10:0.5].")
@@ -118,7 +118,34 @@ class SR_Bin3Problem : Problem<Double, Outputs.Single<Double>, Targets.Single<Do
                     ys.toList()
             )
         }
-    }
+    }*/
+
+    val featureIndices = 0 until 1
+    val targetIndex = 1
+    val datasetLoader = CsvDatasetLoader(
+            reader = BufferedReader(
+                    // Load from the resource file.
+                    InputStreamReader(this.datasetStream)
+            ),
+            featureParseFunction = { header: Header, row: Row ->
+                val features = row.zip(header)
+                        .slice(featureIndices)
+                        .map { (featureValue, featureName) ->
+
+                            Feature(
+                                    name = featureName,
+                                    value = featureValue.toDouble()
+                            )
+                        }
+
+                Sample(features)
+            },
+            targetParseFunction = { _: Header, row: Row ->
+                val target = row[targetIndex]
+
+                Targets.Single(target.toDouble())
+            }
+    )
 
     override val operationLoader = DefaultOperationLoader<Double>(
             operationNames = config.operations
@@ -232,7 +259,8 @@ class SR_Bin3Problem : Problem<Double, Outputs.Single<Double>, Targets.Single<Do
                 }
             })
 
-            val runner = DistributedTrainer(environment, model, runs = 2)
+            //Need to do single runs since the test cases outputs aren't linked to the run (yet)
+            val runner = DistributedTrainer(environment, model, runs = 1)
 
             return runBlocking {
                 val job = runner.trainAsync(
@@ -313,11 +341,14 @@ class TracingFitnessContext<TData, TOutput : Output<TData>, TTarget : Target<TDa
 
 class SR_Bin3 {
     companion object Main {
+
+        private val datasetStream = this::class.java.classLoader.getResourceAsStream("datasets/SR_Bin3.csv")
+
         @JvmStatic fun main(args: Array<String>) {
             System.setProperty("LGP.LogLevel", "debug")
 
             // Create a new problem instance, initialise it, and then solve it.
-            val problem = SR_Bin3Problem()
+            val problem = SR_Bin3Problem(datasetStream)
             problem.initialiseEnvironment()
             problem.initialiseModel()
             val solution = problem.solve()
@@ -333,7 +364,12 @@ class SR_Bin3 {
             var fileWriter: FileWriter? = null
 
             try {
-                fileWriter = FileWriter("outputs.csv")
+                var now = DateTimeFormatter
+                        .ofPattern("yyyy-MM-dd_HH-mm-ss")
+                        .withZone(ZoneOffset.systemDefault())
+                        .format(Instant.now())
+
+                fileWriter = FileWriter("outputs_${now}.csv")
 
                 fileWriter.append(CSV_HEADER)
                 fileWriter.append('\n')
