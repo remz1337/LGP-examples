@@ -1,0 +1,9 @@
+a_in,b_in,c_in,a_out
+true,true,true,true
+false,true,true,true
+true,false,true,true
+true,true,false,true
+false,false,true,false
+false,true,false,false
+true,false,false,false
+false,false,false,false
