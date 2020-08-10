@@ -6,6 +6,8 @@ import nz.co.jedsimson.lgp.core.environment.config.Configuration
 import nz.co.jedsimson.lgp.core.environment.config.ConfigurationLoader
 import nz.co.jedsimson.lgp.core.environment.constants.DoubleConstantLoader
 import nz.co.jedsimson.lgp.core.environment.dataset.*
+import nz.co.jedsimson.lgp.core.environment.events.EventListener
+import nz.co.jedsimson.lgp.core.environment.events.EventRegistry
 import nz.co.jedsimson.lgp.core.environment.operations.DefaultOperationLoader
 import nz.co.jedsimson.lgp.core.evolution.*
 import nz.co.jedsimson.lgp.core.evolution.fitness.FitnessCase
@@ -36,17 +38,18 @@ import nz.co.jedsimson.lgp.lib.generators.EffectiveProgramGenerator
 import nz.co.jedsimson.lgp.lib.generators.RandomInstructionGenerator
 import nz.co.jedsimson.lgp.lib.operations.toBoolean
 import nz.co.jedsimson.lgp.lib.operations.toDouble
-import java.io.BufferedReader
-import java.io.InputStream
-import java.io.InputStreamReader
+import java.io.*
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 
 private val match: SingleOutputFitnessFunction<Double> = object : SingleOutputFitnessFunction<Double>() {
 
-    override fun fitness(outputs: List<Outputs.Single<Boolean>>, cases: List<FitnessCase<Boolean, Targets.Single<Boolean>>>): Double {
+    override fun fitness(outputs: List<Outputs.Single<Double>>, cases: List<FitnessCase<Double, Targets.Single<Double>>>): Double {
         val mismatches = cases.zip(outputs).filter { (case, actual) ->
-            val expected = case.target.values
+            val expected = case.target.value
 
-            actual.values != expected
+            actual.value != expected
         }.count()
 
         return mismatches.toDouble()
@@ -59,21 +62,22 @@ private val match: SingleOutputFitnessFunction<Double> = object : SingleOutputFi
  */
 class BP_Even3ExperimentSolution(
     override val problem: String,
-    val result: TrainingResult<Boolean, Outputs.Single<Boolean>, Targets.Single<Boolean>>,
-    val dataset: Dataset<Boolean, Targets.Single<Boolean>>
-) : Solution<Boolean>
+    val result: TrainingResult<Double, Outputs.Single<Double>, Targets.Single<Double>>,
+    val outputs: List<FitnessContextEvaluationEvent<Double, Outputs.Single<Double>>>,
+    val dataset: Dataset<Double, Targets.Single<Double>>
+) : Solution<Double>
 
 /**
  * Defines the problem.
  */
 class BP_Even3Experiment(
     val datasetStream: InputStream
-) : Problem<Boolean, Outputs.Single<Boolean>, Targets.Single<Boolean>>() {
+) : Problem<Double, Outputs.Single<Double>, Targets.Single<Double>>() {
 
     // 1. Give the problem a name and simple description.
-    override val name = "Custom Fitness Functions Experiment"
+    override val name = "Boolean Parity Even 3"
     override val description = Description(
-        "An example custom fitness functions problem definition for the LGP tutorial."
+        "This program must return true if the majority of inputs are true, otherwise false"
     )
 
     // 2. Define the necessary dependencies to build a problem.
@@ -83,24 +87,23 @@ class BP_Even3Experiment(
         override fun load(): Configuration {
             val config = Configuration()
 
-            config.initialMinimumProgramLength = 10
-            config.initialMaximumProgramLength = 30
-            config.minimumProgramLength = 5
-            config.maximumProgramLength = 100
+            config.initialMinimumProgramLength = 20
+            config.initialMaximumProgramLength = 20
+            config.minimumProgramLength = 20
+            config.maximumProgramLength = 20
             config.operations = listOf(
                 "nz.co.jedsimson.lgp.lib.operations.And",
-                "nz.co.jedsimson.lgp.lib.operations.Or",    
-                "nz.co.jedsimson.lgp.lib.operations.ExclusiveOr"
-                //"nz.co.jedsimson.lgp.examples.kotlin.Nand"
+                "nz.co.jedsimson.lgp.lib.operations.Or",
+                "nz.co.jedsimson.lgp.lib.operations.Not"
             )
             config.constantsRate = 0.0
             config.numCalculationRegisters = 5
-            config.populationSize = 1000
-            config.generations = 1000
+            config.populationSize = 10000
+            config.generations = 1
             config.numFeatures = 3
             config.microMutationRate = 0.8
-            config.macroMutationRate = 0.8
-            config.crossoverRate = 0.8
+            config.macroMutationRate = 0.0//disabled
+            config.crossoverRate = 0.0 //disabled
             config.branchInitialisationRate = 0.0
 
             return config
@@ -109,15 +112,15 @@ class BP_Even3Experiment(
     // To prevent reloading configuration in this module.
     private val configuration = this.configLoader.load()
     // Load constants from the configuration as double values.
-    //override val constantLoader = DoubleConstantLoader(constants = this.configuration.constants)
+    override val constantLoader = DoubleConstantLoader(constants = this.configuration.constants)
     // Load operations from the configuration (operations are resolved using their class name).
-    override val operationLoader = DefaultOperationLoader<Boolean>(operationNames = this.configuration.operations)
+    override val operationLoader = DefaultOperationLoader<Double>(operationNames = this.configuration.operations)
     // Set the default value of any registers to 1.0.
-    override val defaultValueProvider = DefaultValueProviders.constantValueProvider(true)
+    override val defaultValueProvider = DefaultValueProviders.constantValueProvider(1.0)
     // Use the mean-squared error fitness function.
     override val fitnessFunctionProvider = { match }
     // Define the modules to be used for the core evolutionary operations.
-    override val registeredModules = ModuleContainer<Boolean, Outputs.Single<Boolean>, Targets.Single<Boolean>>(
+    override val registeredModules = ModuleContainer<Double, Outputs.Single<Double>, Targets.Single<Double>>(
         modules = mutableMapOf(
             // Generate instructions using the built-in instruction generator.
             CoreModuleType.InstructionGenerator to { environment ->
@@ -127,7 +130,7 @@ class BP_Even3Experiment(
             CoreModuleType.ProgramGenerator to { environment ->
                 EffectiveProgramGenerator(
                     environment,
-                    sentinelTrueValue = 1.0, // Determines the value that represents a boolean "true".
+                    sentinelTrueValue = 0.0, // Determines the value that represents a boolean "true".
                     outputRegisterIndices = listOf(6, 7), // Two program outputs
                     outputResolver = BaseProgramOutputResolvers.singleOutput()
                 )
@@ -140,7 +143,7 @@ class BP_Even3Experiment(
             CoreModuleType.RecombinationOperator to { environment ->
                 LinearCrossover(
                     environment,
-                     maximumSegmentLength = 6,
+                    maximumSegmentLength = 6,
                     maximumCrossoverDistance = 5,
                     maximumSegmentLengthDifference = 3
                 )
@@ -162,10 +165,11 @@ class BP_Even3Experiment(
                     constantMutationFunc = ConstantMutationFunctions.randomGaussianNoise(this.environment.randomState)
                 )
             },
-            // Use the multiple-output fitness context -- meaning that program fitness will be evaluated
-            // using multiple program outputs and the fitness function specified earlier in this definition.
+            // Use the Single-output fitness context -- meaning that program fitness will be evaluated
+            // using Single program outputs and the fitness function specified earlier in this definition.
             CoreModuleType.FitnessContext to { environment ->
-                FitnessContexts.SingleOutputFitnessContext(environment)
+                //FitnessContexts.SingleOutputFitnessContext(environment)
+                TracingFitnessContext(environment)
             }
         )
     )
@@ -201,7 +205,7 @@ class BP_Even3Experiment(
         val featureIndices = 0 until 3
         // Indices of the target variables.
         // c_out, s
-        val targetIndices = 3 until 5
+        val targetIndex = 3
 
         // Load the data set
         val datasetLoader = CsvDatasetLoader(
@@ -216,18 +220,32 @@ class BP_Even3Experiment(
 
                         Feature(
                             name = featureName,
-                            value = featureValue.toBoolean()
+                            value = featureValue.toDouble()
                         )
                     }
 
                 Sample(features)
             },
             targetParseFunction = { _: Header, row: Row ->
-                val targets = row.slice(targetIndices).map { target -> target.toBoolean() }
+                //val targets = row.slice(targetIndices).map { target -> target.toDouble() }
 
-                Targets.Single(targets)
+                //Targets.Single(targets)
+
+                val target = row[targetIndex]
+
+                Targets.Single(target.toDouble())
             }
         )
+
+
+        val fitnessContextEvaluationEvents = mutableListOf<FitnessContextEvaluationEvent<Double, Outputs.Single<Double>>>()
+
+        EventRegistry.register(object : EventListener<FitnessContextEvaluationEvent<Double, Outputs.Single<Double>>> {
+            override fun handle(event: FitnessContextEvaluationEvent<Double, Outputs.Single<Double>>) {
+                fitnessContextEvaluationEvents += event
+            }
+        })
+
 
         val dataset = datasetLoader.load()
 
@@ -248,6 +266,7 @@ class BP_Even3Experiment(
         return BP_Even3ExperimentSolution(
             problem = this.name,
             result = trainer.train(dataset),
+            outputs = fitnessContextEvaluationEvents,
             dataset = dataset
         )
     }
@@ -256,20 +275,65 @@ class BP_Even3Experiment(
 class BP_Even3 {
     companion object Main {
 
-        private val datasetStream = this::class.java.classLoader.getResourceAsStream("datasets/full-adder.csv")
+        private val datasetStream = this::class.java.classLoader.getResourceAsStream("datasets/BP_Even3.csv")
 
         @JvmStatic fun main(args: Array<String>) {
             val problem = BP_Even3Experiment(datasetStream)
             problem.initialiseEnvironment()
             problem.initialiseModel()
-            
+
             val solution = problem.solve()
-            val simplifier = BaseProgramSimplifier<Boolean, Outputs.Single<Boolean>>()
-            val programTranslator = BaseProgramTranslator<Boolean, Outputs.Single<Boolean>>(includeMainFunction = true)
+            val simplifier = BaseProgramSimplifier<Double, Outputs.Single<Double>>()
+            val programTranslator = BaseProgramTranslator<Double, Outputs.Single<Double>>(includeMainFunction = false)
+
+            println("Exporting outputs to CSV...")
+
+            var CSV_HEADER = "program"
+            for(output_it in solution.outputs[0].outputs.indices){
+                CSV_HEADER += ",testcase${output_it}"
+            }
+
+            var fileWriter: FileWriter? = null
+
+            try {
+                var now = DateTimeFormatter
+                    .ofPattern("yyyy-MM-dd_HH-mm-ss")
+                    .withZone(ZoneOffset.systemDefault())
+                    .format(Instant.now())
+
+                fileWriter = FileWriter("outputs_${now}.csv")
+
+                fileWriter.append(CSV_HEADER)
+                fileWriter.append('\n')
+
+                for (program in solution.outputs) {
+                    fileWriter.append('"'+program.program.instructions.toString()+'"')
+                    for (testcase in program.outputs){
+                        fileWriter.append(',')
+                        fileWriter.append(testcase.value.toString())
+                    }
+                    fileWriter.append('\n')
+                }
+
+                println("Write CSV successfully!")
+            } catch (e: Exception) {
+                println("Writing CSV error!")
+                e.printStackTrace()
+            } finally {
+                try {
+                    fileWriter!!.flush()
+                    fileWriter.close()
+                } catch (e: IOException) {
+                    println("Flushing/closing error!")
+                    e.printStackTrace()
+                }
+            }
+
+            println("Results:")
 
             solution.result.evaluations.forEachIndexed { run, res ->
                 println("Run ${run + 1} (best fitness = ${res.best.fitness})")
-                println(simplifier.simplify(res.best as BaseProgram<Boolean, Outputs.Single<Boolean>>))
+                println(simplifier.simplify(res.best as BaseProgram<Double, Outputs.Single<Double>>))
                 println("\nStats (last run only):\n")
 
                 for ((k, v) in res.statistics.last().data) {
