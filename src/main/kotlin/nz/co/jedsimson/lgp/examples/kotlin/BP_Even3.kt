@@ -306,7 +306,7 @@ class BP_Even3 {
                 fileWriter.append('\n')
 
                 for (program in solution.outputs) {
-                    fileWriter.append('"'+program.program.instructions.toString()+'"')
+                    fileWriter.append(program.program.instructions.toString().replace(",","").replace("[","").replace("]",""))
                     fileWriter.append(','+program.program.fitness.toString())
                     for (testcase in program.outputs){
                         fileWriter.append(',')
