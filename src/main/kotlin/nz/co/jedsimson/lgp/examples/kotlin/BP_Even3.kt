@@ -92,9 +92,8 @@ class BP_Even3Experiment(
             config.minimumProgramLength = 20
             config.maximumProgramLength = 20
             config.operations = listOf(
-                "nz.co.jedsimson.lgp.lib.operations.And",
-                "nz.co.jedsimson.lgp.lib.operations.Or",
-                "nz.co.jedsimson.lgp.lib.operations.Not"
+                "nz.co.jedsimson.lgp.lib.operations.Nand",
+                "nz.co.jedsimson.lgp.lib.operations.Nor"
             )
             config.constantsRate = 0.0
             config.numCalculationRegisters = 5
@@ -288,7 +287,7 @@ class BP_Even3 {
 
             println("Exporting outputs to CSV...")
 
-            var CSV_HEADER = "program"
+            var CSV_HEADER = "program,fitness"
             for(output_it in solution.outputs[0].outputs.indices){
                 CSV_HEADER += ",testcase${output_it}"
             }
@@ -308,6 +307,7 @@ class BP_Even3 {
 
                 for (program in solution.outputs) {
                     fileWriter.append('"'+program.program.instructions.toString()+'"')
+                    fileWriter.append(','+program.program.fitness.toString())
                     for (testcase in program.outputs){
                         fileWriter.append(',')
                         fileWriter.append(testcase.value.toString())
