@@ -34,7 +34,19 @@ import java.io.*
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
-import java.util.*
+
+//Define some constants
+const val ERROR = 0
+const val FOOD = -1
+const val EMPTY = 1
+const val TRAIL = 2
+const val ATE = 3
+
+// orientations
+const val O_UP = 0
+const val O_LEFT = 1
+const val O_DOWN = 2
+const val O_RIGHT = 3
 
 
 private val match: SingleOutputFitnessFunction<String> = object : SingleOutputFitnessFunction<String>() {
@@ -194,30 +206,77 @@ class AntExperiment(
 
     // 5. Describe the steps required to solve the problem using the definition given above.
     override fun solve(): AntExperimentSolution {
-        // Indices of the feature variables
-        // a, b, c_in
-        val featureIndices = 0 until 3
-        // Indices of the target variables.
-        // c_out, s
-        val targetIndex = 3
-
         // Load the data set
         val datasetLoader = TxtDatasetLoader<String, Targets.Single<String>>(
                 reader = BufferedReader(
                         // Load from the resource file.
                         InputStreamReader(this.datasetStream)
                 ),
-                featureParseFunction = { header: TxtHeader, row: TxtRow ->
-                    val feature = Feature(
+                txtParseFunction = { lines: List<String> ->
+                    val header = lines[0]
+
+                    val map_w_h = header.split(" ")
+                    val map_width = map_w_h[0].toInt()
+                    val map_height = map_w_h[1].toInt()
+
+                    var total_food=0;
+
+                    //var line_it = 1
+                    //val stop_it = lines.size
+
+                    var map: Array<IntArray> = Array(map_height) { IntArray(map_width) }
+
+                    for (y in 0 until map_height) {
+                        val line = lines[y+1]//skip header
+
+                        var x=0
+
+                        for (char in line){
+
+                            if (char==' ')
+                                map[y][x] = EMPTY
+                            else if (char=='#')
+                            {
+                                map[y][x] = FOOD;
+                                total_food++;
+                            }
+                            else if (char=='.')
+                                map[y][x]=TRAIL;
+                            else println("Bad character '${char}' on line number ${y+1} of the Ant trail file.")
+                            x++
+                        }
+                        while (x < map_width){
+                            map[y][x] = EMPTY
+                            x++
+                        }
+                    }
+
+                    val t = Feature("test", "test")
+                    val u = mutableListOf(t)
+                    val v = Sample(u)
+                    val w = mutableListOf(v)
+                    //val inputs = List(Sample(List(Feature("test","test"))))
+
+                    val a = Targets.Single("testo")
+                    val b = mutableListOf(a)
+
+                    Dataset(w, b)
+
+
+                    /*val feature = Feature(
                             name = "feature name",
                             value = row.toString()
-                    )
-                    val features: MutableList<Feature<String>> = mutableListOf(feature)
-                    Sample(features)
-                },
+                    )*/
+
+                    //val features: MutableList<Feature<String>> = mutableListOf(feature)
+
+
+                    //Dataset(features, Targets.Single("test"))
+                }
+                /*
                 targetParseFunction = { _: TxtHeader, row: TxtRow ->
                     Targets.Single(row)
-                }
+                }*/
         )
 
 
