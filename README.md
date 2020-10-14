@@ -10,6 +10,12 @@ A set of example usages of [`nz.co.jedsimson.lgp.LGP`](https://github.com/JedS63
 
 To run the provided examples, you can build a fat JAR using Gradle and then execute the given main class, as follows:
 
+0. On compute cluster, load java module and allocate resources to build
+```
+salloc --mem=16G
+module load java/1.8.0_192
+```
+
 1. Build a fat JAR
 
 ```bash
